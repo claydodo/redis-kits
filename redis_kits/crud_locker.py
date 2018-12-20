@@ -15,13 +15,14 @@ __all__ = ['CRUDLocker']
 class CRUDLocker(object):
     class NeedRetry(Exception): pass
     class Timeout(Exception): pass
+    class LockFailed(Exception): pass
 
     permitted_actions = {
         # CURRENT_STATUS: ACTION
         "create": [],
         "retrieve": ["retrieve"],
         "update": [],
-        "delete": []
+        "delete": [],
     }
 
     prefix = 'crud_lock'
@@ -91,7 +92,7 @@ class CRUDLocker(object):
                 if current_status is None or action in self.permitted_actions[current_status['action']]:
                     result = self.redis_connection.set(key, status_json, px=ttl)
                     if result is None:
-                        raise CRUDLocker.CanNotLock
+                        raise CRUDLocker.LockFailed
 
                     if action == 'delete':
                         self._delete_lru_record(resource)
@@ -120,8 +121,11 @@ class CRUDLocker(object):
             finally:
                 self._unmark(resource, token)
 
-    def touch(self, resource):
-        return self._update_lru_record(resource)
+    def touch(self, *resources):
+        return self._update_lru_record(*resources)
+
+    def untouch(self, *resources):
+        return self._delete_lru_record(*resources)
 
     def get_status(self, resource):
         contents = self.redis_connection.get(self.resource2key(resource))
@@ -169,14 +173,18 @@ class CRUDLocker(object):
             # Let the mark expires.
             pass
 
-    def _update_lru_record(self, resource):
+    def _update_lru_record(self, *resources):
+        tstamp = datetime.now().timestamp()
         if REDIS_VERSION[0] >= 3:
-            self.redis_connection.zadd(self.lru_key, {resource: datetime.now().timestamp()})
+            self.redis_connection.zadd(self.lru_key, {r: tstamp for r in resources})
         else:
-            self.redis_connection.zadd(self.lru_key, resource, datetime.now().timestamp())
+            l = []
+            for r in resources:
+                l.extend([r, tstamp])
+            self.redis_connection.zadd(self.lru_key, *l)
 
-    def _delete_lru_record(self, resource):
-        self.redis_connection.zrem(self.lru_key, resource)
+    def _delete_lru_record(self, *resources):
+        self.redis_connection.zrem(self.lru_key, *resources)
 
     def lru_count(self):
         return self.redis_connection.zcard(self.lru_key)

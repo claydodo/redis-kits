@@ -5,7 +5,7 @@ import setuptools
 
 setuptools.setup(
     name="redis_kits",
-    version="0.0.1",
+    version="0.0.2",
     author="claydodo and his little friends (xiao huo ban)",
     author_email="claydodo@foxmail.com",
     description="Toolkits built upon Redis",
