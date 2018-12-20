@@ -181,9 +181,13 @@ class CRUDLocker(object):
             l = []
             for r in resources:
                 l.extend([r, tstamp])
+            if not l:
+                return
             self.redis_connection.zadd(self.lru_key, *l)
 
     def _delete_lru_record(self, *resources):
+        if len(resources) == 0:
+            return
         self.redis_connection.zrem(self.lru_key, *resources)
 
     def lru_count(self):
@@ -200,4 +204,6 @@ class CRUDLocker(object):
 
     def lru_reset(self):
         items = self.redis_connection.zrange(self.lru_key, 0, -1)
+        if len(items) == 0:
+            return
         self.redis_connection.zrem(self.lru_key, *items)
